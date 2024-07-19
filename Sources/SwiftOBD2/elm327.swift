@@ -21,7 +21,7 @@ class ELM327 {
     private var obdProtocol: PROTOCOL = .NONE
     var canProtocol: CANProtocol?
 
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.example.com", category: "ELM327")
+    //private let Logger.elm327 = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.example.com", category: "ELM327")
     private var comm: CommProtocol
 
     private var cancellables = Set<AnyCancellable>()
@@ -72,6 +72,7 @@ class ELM327 {
             do {
                 obdProtocol = try await manualProtocolDetection(desiredProtocol: desiredProtocol)
             } catch {
+                Logger.elm327.warning("Falling back to automatic protocol detection")
                 obdProtocol = nil // Fallback to autoProtocol
             }
         }
@@ -109,13 +110,13 @@ class ELM327 {
     func connectToVehicle(autoProtocol: Bool) async throws -> PROTOCOL? {
         if autoProtocol {
             guard let obdProtocol = try await autoProtocolDetection() else {
-                logger.error("No protocol found")
+                Logger.elm327.error("No protocol found")
                 throw SetupError.noProtocolFound
             }
             return obdProtocol
         } else {
             guard let obdProtocol = try await manualProtocolDetection(desiredProtocol: nil) else {
-                logger.error("No protocol found")
+                Logger.elm327.error("No protocol found")
                 throw SetupError.noProtocolFound
             }
             return obdProtocol
@@ -130,10 +131,13 @@ class ELM327 {
     private func autoProtocolDetection() async throws -> PROTOCOL? {
         _ = try await okResponse(message: "ATSP0")
         try? await Task.sleep(nanoseconds: 1_000_000_000)
+        Logger.elm327.log("Sending command `0100` with timeout: 20 sec")
         _ = try await sendCommand("0100", withTimeoutSecs: 20)
 
         let obdProtocolNumber = try await sendCommand("ATDPN")
+        Logger.elm327.log("Attempting to retrieve protocol by number: \(obdProtocolNumber)")
         guard let obdProtocol = PROTOCOL(rawValue: String(obdProtocolNumber[0].dropFirst())) else {
+            Logger.elm327.critical("Invalid protocol number: \(obdProtocolNumber)")
             throw SetupError.invalidResponse(message: "Invalid protocol number: \(obdProtocolNumber)")
         }
 
@@ -161,7 +165,7 @@ class ELM327 {
             }
         }
         /// If we reach this point, no protocol was found
-        logger.error("No protocol found")
+        Logger.elm327.error("No protocol found")
         throw SetupError.noProtocolFound
     }
 
@@ -174,6 +178,7 @@ class ELM327 {
     /// - Throws: Various setup-related errors.
     private func testProtocol(obdProtocol: PROTOCOL) async throws {
         // test protocol by sending 0100 and checking for 41 00 response
+        Logger.elm327.log("test protocol by sending 0100 and checking for 41 00 response")
         _ = try await okResponse(message: obdProtocol.cmd)
 
 //        _ = try await sendCommand("0100", withTimeoutSecs: 10)
@@ -185,11 +190,11 @@ class ELM327 {
         self.r100 = r100
 
         guard r100.joined().contains("41 00") else {
-            logger.error("Invalid response to 0100")
+            Logger.elm327.error("Invalid response to 0100")
             throw SetupError.invalidProtocol
         }
 
-        logger.info("Protocol \(obdProtocol.rawValue) found")
+        Logger.elm327.log("Protocol \(obdProtocol.rawValue) found")
     }
 
     // MARK: - Adapter Initialization
@@ -240,16 +245,16 @@ class ELM327 {
             return response
         } else {
             print("Invalid response: \(response)")
-            logger.error("Invalid response: \(response)")
+            Logger.elm327.error("Invalid response: \(response)")
             throw SetupError.invalidResponse(message: "message: \(message), \(String(describing: response.first))")
         }
     }
 
     func getStatus() async throws -> Result<DecodeResult, DecodeError> {
-        logger.info("Getting status")
+        Logger.elm327.info("Getting status")
         let statusCommand = OBDCommand.Mode1.status
         let statusResponse = try await sendCommand(statusCommand.properties.command)
-        logger.debug("Status response: \(statusResponse)")
+        Logger.elm327.debug("Status response: \(statusResponse)")
         guard let statusData = canProtocol?.parce(statusResponse).first?.data else {
             return .failure(.noData)
         }
@@ -258,7 +263,7 @@ class ELM327 {
 
     func scanForTroubleCodes() async throws -> [ECUID:[TroubleCode]] {
         var dtcs: [ECUID:[TroubleCode]]  = [:]
-        logger.info("Scanning for trouble codes")
+        Logger.elm327.info("Scanning for trouble codes")
         let dtcCommand = OBDCommand.Mode3.GET_DTC
         let dtcResponse = try await sendCommand(dtcCommand.properties.command)
 
@@ -277,7 +282,7 @@ class ELM327 {
                 dtcs[ecuId] = result.troubleCode
 
             case .failure(let error):
-                logger.error("Failed to decode DTC: \(error)")
+                Logger.elm327.error("Failed to decode DTC: \(error)")
             }
         }
 
@@ -349,7 +354,7 @@ extension ELM327 {
 
             for message in messages {
                 guard let bits = message.data?.bitCount() else {
-                    logger.error("parse_frame failed to extract data")
+                    Logger.elm327.error("parse_frame failed to extract data")
                     continue
                 }
                 if bits > bestBits {
@@ -381,7 +386,7 @@ extension ELM327 {
 
         for pidGetter in pidGetters {
             do {
-                logger.info("Getting supported PIDs for \(pidGetter.properties.command)")
+                Logger.elm327.info("Getting supported PIDs for \(pidGetter.properties.command)")
                 let response = try await sendCommand(pidGetter.properties.command)
                 // find first instance of 41 plus command sent, from there we determine the position of everything else
                 // Ex.
@@ -397,7 +402,7 @@ extension ELM327 {
 
                 supportedPIDs.append(contentsOf: supportedCommands)
             } catch {
-                logger.error("\(error.localizedDescription)")
+                Logger.elm327.error("\(error.localizedDescription)")
             }
         }
         // filter out pidGetters
@@ -450,7 +455,7 @@ struct BatchedResponse {
             case .success(let measurementResult):
                 return measurementResult.measurementResult
         case .failure(let error):
-            logger.error("Failed to decode \(cmd.properties.command): \(error.localizedDescription)")
+            Logger.elm327.error("Failed to decode \(cmd.properties.command): \(error.localizedDescription)")
             return nil
         }
     }

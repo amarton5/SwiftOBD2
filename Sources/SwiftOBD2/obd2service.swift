@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import OSLog
 
 public enum ConnectionType: String, CaseIterable {
     case bluetooth = "Bluetooth"
@@ -65,11 +66,15 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     /// - Throws: Errors that might occur during the connection process.
     public func startConnection(preferedProtocol: PROTOCOL? = nil, timeout: TimeInterval = 7) async throws -> OBDInfo {
         do {
+            Logger.obd2service.log("--> Connecting to adapter")
             try await elm327.connectToAdapter(timeout: timeout)
+            Logger.obd2service.log("--> Initializing adapter")
             try await elm327.adapterInitialization()
+            Logger.obd2service.log("--> Initializing vehicle with protocol: \(preferedProtocol?.rawValue ?? "no proto")")
             let obdInfo = try await initializeVehicle(preferedProtocol)
             return obdInfo
         } catch {
+            Logger.obd2service.critical(">>> Failed to connect to adapter with error:\n\(error.localizedDescription)")
             throw OBDServiceError.adapterConnectionFailed(underlyingError: error) // Propagate
         }
     }
