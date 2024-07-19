@@ -80,6 +80,7 @@ class WifiManager: CommProtocol {
 
                 self.tcp?.receive(minimumIncompleteLength: 1, maximumLength: 500, completion: { data, _, _, _ in
                     guard let response = data, let string = String(data: response, encoding: .utf8) else {
+                        Logger.wifiMgr.critical("[sendCommand] will return because response cannot be gathered or encoded")
                         return
                     }
                     if string.contains(">") {
