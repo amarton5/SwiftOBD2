@@ -208,6 +208,7 @@ class ELM327 {
     /// - Throws: Various setup-related errors.
     func adapterInitialization(setupOrder: [OBDCommand.General] = [.ATZ, .ATD, .ATL0, .ATE0, .ATH1, .ATAT1, .ATRV, .ATDPN]) async throws {
         for step in setupOrder {
+            Logger.elm327.log("Init adapter by setup: \(step.properties.command.utf8)")
             switch step {
             case .ATD, .ATL0, .ATE0, .ATH1, .ATAT1, .ATSTFF, .ATH0:
                 _ = try await okResponse(message: step.properties.command)

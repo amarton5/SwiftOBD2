@@ -66,7 +66,7 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     /// - Throws: Errors that might occur during the connection process.
     public func startConnection(preferedProtocol: PROTOCOL? = nil, timeout: TimeInterval = 7) async throws -> OBDInfo {
         do {
-            Logger.obd2service.log("--> Connecting to adapter")
+            Logger.obd2service.log("--> Connecting to adapter with timeout: \(timeout) ")
             try await elm327.connectToAdapter(timeout: timeout)
             Logger.obd2service.log("--> Initializing adapter")
             try await elm327.adapterInitialization()
