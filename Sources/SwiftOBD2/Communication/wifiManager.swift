@@ -23,7 +23,7 @@ enum CommunicationError: Error {
 }
 
 class WifiManager: CommProtocol {
-    let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.example.app", category: "wifiManager")
+    //let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.example.app", category: "wifiManager")
 
     var obdDelegate: OBDServiceDelegate?
 
@@ -33,8 +33,10 @@ class WifiManager: CommProtocol {
     var tcp: NWConnection?
 
     func connectAsync(timeout: TimeInterval) async throws {
+        Logger.wifiMgr.log("[connectAsync] IP:PORT = 192.168.0.10:35000")
         let host = NWEndpoint.Host("192.168.0.10")
         guard let port = NWEndpoint.Port("35000") else {
+            Logger.wifiMgr.error("[connectAsync] Invalid data")
             throw CommunicationError.invalidData
         }
         tcp = NWConnection(host: host, port: port, using: .tcp)
@@ -42,13 +44,16 @@ class WifiManager: CommProtocol {
             tcp?.stateUpdateHandler = { newState in
                 switch newState {
                 case .ready:
-                    print("Connected")
+                    //print("Connected")
+                    Logger.wifiMgr.log("Connected")
                     self.connectionState = .connectedToAdapter
                     continuation.resume(returning: ())
                 case let .waiting(error):
-                    print("Waiting \(error)")
+                    Logger.wifiMgr.error("Waiting: \(error.localizedDescription)")
+                    //print("Waiting \(error)")
                 case let .failed(error):
-                    print("Failed \(error)")
+                    //print("Failed \(error)")
+                    Logger.wifiMgr.error("Failed: \(error.localizedDescription)")
                     continuation.resume(throwing: CommunicationError.errorOccurred(error))
                 default:
                     break
@@ -60,14 +65,16 @@ class WifiManager: CommProtocol {
 
     func sendCommand(_ command: String) async throws -> [String] {
         guard let data = "\(command)\r".data(using: .ascii) else {
+            Logger.wifiMgr.error("[sendCommand] Invalid data")
             throw CommunicationError.invalidData
         }
-        logger.info("Sending: \(command)")
+        Logger.wifiMgr.log("Sending: \(command)")
 
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[String], Error>) in
             self.tcp?.send(content: data, completion: .contentProcessed { error in
                 if let error = error {
-                    print("Error sending data \(error)")
+                    //print("Error sending data \(error)")
+                    Logger.wifiMgr.error("Error sending data \(error)")
                     continuation.resume(throwing: error)
                 }
 
@@ -76,7 +83,8 @@ class WifiManager: CommProtocol {
                         return
                     }
                     if string.contains(">") {
-                        print("Received \(string)")
+                        Logger.wifiMgr.log("Received \(string)")
+                        //print("Received \(string)")
 
                         var lines = string
                             .components(separatedBy: .newlines)
